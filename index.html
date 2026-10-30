@@ -225,7 +225,7 @@ body.discret .pbh b{filter:blur(7px)}
 
 <script>
 /* ================= CONFIG ================= */
-const VERSION = '4.7';
+const VERSION = '4.8';
 // Fonctionnalités masquables (Réglages). Masquer = ne plus afficher ; les données continuent d'être enregistrées.
 const FONCS = [
   ['pj', 'Montant par jour', 'sous le grand chiffre et à la saisie'],
@@ -238,7 +238,7 @@ const FONCS = [
 const on = k => !LS.get('off', []).includes(k);
 const progresVisible = () => on('defi') || on('series') || on('bilan');
 // Optionnel : lien proposé par défaut au premier lancement. Laisser vide pour la version commune.
-const API_DEFAUT = 'https://script.google.com/macros/s/AKfycbxIB21kAuirZ-LCtRXuHcLfEN5pvpMcjGlxFdGe5RclnZ_TsCQj5COgKAg5Nziijjtt3Q/exec';
+const API_DEFAUT = 'https://script.google.com/macros/s/AKfycbx_pCeMiFoPnBoN9rILDEeP36tarhN1UNjvjMnBhnwDxrKQDjw6V-hcRfrn5tQlPruFvw/exec';
 const API_ATTENDUE = '3.5';
 
 /* ================= OUTILS ================= */
@@ -515,7 +515,7 @@ function blocAvances() {
   return `<div class="sec"><span>ON TE DOIT</span><span>${e0(tot)}</span></div><div class="ticket">${L.map(p => `<button class="tl" data-act="remb" data-n="${esc(p.nom)}"><span>${esc(p.nom.toUpperCase())} <small class="muted" style="font-size:10px;letter-spacing:0">${esc(p.ouverts.map(o => o.lib).filter((v, i, a) => a.indexOf(v) === i).slice(0, 2).join(', '))}</small></span><span>${e2(p.du)} ›</span></button>`).join('')}</div>`;
 }
 function ouvrirRemb(nom) {
-  const p = avances().find(x => x.nom === nom); if (!p) return;
+  const p = avances().find(x => x.nom === nom); if (!p) { toast(nom + ' ne te doit plus rien'); rendre(true); return; }
   S.form = { mode: 'remb', nom, du: p.du, ouverts: p.ouverts, montant: String(Math.round(p.du * 100) / 100).replace('.', ',') };
   rendreForm(); ouvrirSheet();
 }
@@ -537,7 +537,7 @@ function okRemb() {
   const y = now.getFullYear(), m = now.getMonth() + 1;
   const e = { id: uid(), row: null, date: auj(), mois: moisLabel(y, m), lib: f.nom + ' · remboursé le ' + auj().slice(8) + '/' + auj().slice(5, 7), cat: CAT_AV, montant: -v, y, m, srv: null, pending: true, nw: true };
   S.journal.push(e); memo = new Map(); enfiler({ op: 'add', id: e.id });
-  fermer(); rendre(true); toast(f.nom + ' : ' + (f.du - v > 0.005 ? 'reste ' + e2(f.du - v) : 'tout est remboursé ✓'), 'ANNULER', () => supprimer(e));
+  fermer(); rendre(true); toast(f.nom + ' : ' + (f.du - v > 0.005 ? 'reste ' + e2(f.du - v) + ' €' : 'tout est remboursé ✓'), 'ANNULER', () => supprimer(e));
 }
 // ---- Défi du mois ----
 const cleMois = (y, m) => y + '-' + m;
@@ -986,7 +986,7 @@ function enregistrer() {
     const es = nouv.map(x => ({ id: uid(), row: null, date: auj(), mois, lib: x.lib, cat: x.cat, montant: x.montant, y: f.y, m: f.m, srv: null, pending: true, nw: true }));
     es.forEach(e => S.journal.push(e)); memo = new Map(); noterDepenseDuJour();
     fermer(); S.y = f.y; S.m = f.m; rendre(true);
-    toast(`Ta part ${e2(pa.moi)} · on te doit ${e2(pa.chacun * pa.n)}`, 'ANNULER', () => es.forEach(e => supprimer(e)));
+    toast(`Ta part ${e2(pa.moi)} € · on te doit ${e2(pa.chacun * pa.n)} €`, 'ANNULER', () => es.forEach(e => supprimer(e)));
     es.forEach(e => enfiler({ op: 'add', id: e.id })); return;
   }
   if (f.mode === 'add') {
@@ -1681,7 +1681,7 @@ function statsAnnee(y) {
   // catégories de l'année vs même période de l'année précédente
   const dern = r.length ? r[r.length - 1].m : 0, tot = {}, prev = {};
   for (let k = 1; k <= dern; k++) { const a = calc(y, k).par, b = calc(y - 1, k).par; Object.keys(a).forEach(n => tot[n] = (tot[n] || 0) + a[n].j + a[n].e); Object.keys(b).forEach(n => prev[n] = (prev[n] || 0) + b[n].j + b[n].e); }
-  const cl = Object.keys(tot).filter(n => cm[n] && cm[n].type === 'Dépense' && tot[n] > 0).sort((a, b) => tot[b] - tot[a]);
+  const cl = Object.keys(tot).filter(n => cm[n] && cm[n].type === 'Dépense' && !estAv(n) && tot[n] > 0).sort((a, b) => tot[b] - tot[a]);
   if (cl.length) {
     const mx = tot[cl[0]];
     h += `<div class="sec"><span>OÙ PART L'ARGENT EN ${y}</span><span>VS ${y - 1}</span></div>`;
@@ -1711,7 +1711,7 @@ function statsAnnee(y) {
 function statsMois(y, m) {
   const c = calc(y, m), cm = catMap();
   const moy12 = n => { let t = 0, k = 0; for (let i = 1; i <= 12; i++) { const z = y * 12 + m - 1 - i, yy = Math.floor(z / 12), mm = (z % 12) + 1; t += montantCat(n, yy, mm); k++; } return t / k; };
-  const l = Object.keys(c.par).filter(n => cm[n].type === 'Dépense').map(n => ({ n, v: c.par[n].j + c.par[n].e, moy: moy12(n) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v);
+  const l = Object.keys(c.par).filter(n => cm[n].type === 'Dépense' && !estAv(n)).map(n => ({ n, v: c.par[n].j + c.par[n].e, moy: moy12(n) })).filter(x => x.v > 0).sort((a, b) => b.v - a.v);
   const tot = c.dep, pm = m === 1 ? calc(y - 1, 12) : calc(y, m - 1);
   let tm = 0; for (let i = 1; i <= 12; i++) { const z = y * 12 + m - 1 - i; tm += calc(Math.floor(z / 12), (z % 12) + 1).dep; } tm /= 12;
   let h = `<div class="ticket" style="margin-top:12px"><div class="tl tot"><span>DÉPENSES DU MOIS</span><span>${e2(tot)}</span></div>
@@ -1794,6 +1794,7 @@ document.addEventListener('click', ev => {
   const k = ev.target.closest('[data-k]'); if (k && S.form && S.form.montant !== undefined && !S.form.mode.match(/ech|cat|bud|solde|regl/)) { touche(k.dataset.k); return; }
   const el = ev.target.closest('[data-act]'); if (!el) return;
   const a = el.dataset.act;
+  if (!S.form && el.closest('#sheetIn') && a !== 'close') return; // feuille déjà fermée : clic fantôme ignoré
   if (a.startsWith('tab:')) { S.tab = a.slice(4); if (S.tab !== 'journal') { S.filtre.cat = null; S.filtre.grp = null; } rendre(); scrollTo(0, 0); return; }
   if (a.startsWith('sm:')) { const f = S.form; let m = f.m + +a.slice(3), y = f.y; if (m < 1) { m = 12; y--; } if (m > 12) { m = 1; y++; } if (y * 12 + m > nowYM()) return; f.y = y; f.m = m; rendreSolde(); return; }
   if (a.startsWith('fonc:')) { const k = a.slice(5), off = LS.get('off', []); LS.set('off', off.includes(k) ? off.filter(x => x !== k) : [...off, k]); memo = new Map(); rendreReglages(); rendre(true); return; }
