@@ -225,7 +225,7 @@ body.discret .pbh b{filter:blur(7px)}
 
 <script>
 /* ================= CONFIG ================= */
-const VERSION = '4.6';
+const VERSION = '4.7';
 // Fonctionnalités masquables (Réglages). Masquer = ne plus afficher ; les données continuent d'être enregistrées.
 const FONCS = [
   ['pj', 'Montant par jour', 'sous le grand chiffre et à la saisie'],
@@ -1467,7 +1467,7 @@ function rendreCats() {
   h += (S.data.libres || 0) > 0 ? `<button class="add" data-act="cat-new">+ NOUVELLE CATÉGORIE</button>`
     : `<div class="note" style="margin-top:14px">Plus de place libre dans le fichier : retire une catégorie inutilisée pour en ajouter une.</div>`;
   h += `<div class="note">★ épingle une catégorie en tête de la saisie rapide. Les flèches règlent l'ordre d'affichage. Touche un nom pour le renommer, changer son groupe ou le retirer.</div>`;
-  GROUPES.concat(['Sans groupe']).forEach(g => {
+  GROUPES.concat(['Avances', 'Sans groupe']).forEach(g => {
     const z = parG[g]; if (!z) return;
     h += `<div class="grp" style="margin-top:16px">${esc(g.toUpperCase())}</div>`;
     z.forEach((c, i) => {
