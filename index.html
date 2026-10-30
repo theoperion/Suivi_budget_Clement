@@ -238,7 +238,7 @@ const FONCS = [
 const on = k => !LS.get('off', []).includes(k);
 const progresVisible = () => on('defi') || on('series') || on('bilan');
 // Optionnel : lien proposé par défaut au premier lancement. Laisser vide pour la version commune.
-const API_DEFAUT = 'COLLE_ICI_L_URL_DU_DEPLOIEMENT';
+const API_DEFAUT = 'https://script.google.com/macros/s/AKfycbxIB21kAuirZ-LCtRXuHcLfEN5pvpMcjGlxFdGe5RclnZ_TsCQj5COgKAg5Nziijjtt3Q/exec';
 const API_ATTENDUE = '3.5';
 
 /* ================= OUTILS ================= */
@@ -270,7 +270,7 @@ const CAT_AV = 'Avances (on me doit)', estAv = n => /^Avances/i.test(String(n ||
 /* ================= ÉTAT ================= */
 const now = new Date();
 const S = {
-  data: null, journal: [], queue: LS.get('queue', []), key: LS.get('key', ''), api: LS.get('api', '') || (/\/exec\/?$/.test(API_DEFAUT) ? API_DEFAUT : ''),
+  data: null, journal: [], queue: LS.get('queue', []), key: LS.get('key', ''), api: (() => { const ok = /\/exec\/?$/.test(API_DEFAUT); if (ok && LS.get('apiDefautVu', '') !== API_DEFAUT) { LS.set('apiDefautVu', API_DEFAUT); LS.set('api', API_DEFAUT); } return LS.get('api', '') || (ok ? API_DEFAUT : ''); })(),
   tab: 'home', y: now.getFullYear(), m: now.getMonth() + 1,
   filtre: { cat: null, q: '' }, busy: false, lastFetch: 0, lastFrac: 0, anomOpen: false, form: null
 };
