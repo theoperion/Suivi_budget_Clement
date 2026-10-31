@@ -225,7 +225,7 @@ body.discret .pbh b{filter:blur(7px)}
 
 <script>
 /* ================= CONFIG ================= */
-const VERSION = '4.9';
+const VERSION = '5.0';
 // Fonctionnalités masquables (Réglages). Masquer = ne plus afficher ; les données continuent d'être enregistrées.
 const FONCS = [
   ['pj', 'Montant par jour', 'sous le grand chiffre et à la saisie'],
@@ -238,7 +238,7 @@ const FONCS = [
 const on = k => !LS.get('off', []).includes(k);
 const progresVisible = () => on('defi') || on('series') || on('bilan');
 // Optionnel : lien proposé par défaut au premier lancement. Laisser vide pour la version commune.
-const API_DEFAUT = 'https://script.google.com/macros/s/AKfycbx2xNeL9SxoeI-WbNz_n5UTHyvf3wHATwpjMCbToUs2aYie4XFYiiT_193Ce2QOnBM/exec';
+const API_DEFAUT = 'https://script.google.com/macros/s/AKfycbzGuwCW0scX5BMcIxOQwKBIwUFG8o75YAkVF6WGQNmt_EgPj3h_sp0zRk08u8oKYk4PHQ/exec';
 const API_ATTENDUE = '3.5'; // version minimale du script ; les versions plus récentes sont acceptées
 
 /* ================= OUTILS ================= */
@@ -542,7 +542,8 @@ function okRemb() {
 }
 // ---- Report des livrets vers le fichier patrimoine (seulement si le script est relié à un fichier patrimoine) ----
 const courtLivret = n => String(n).replace(/\s+Banque Pop\.?$/i, '');
-function livretsDispo() { return (S.data && S.data.livrets) || []; }
+function comptesDispo() { const d = S.data || {}; return d.comptes || (d.livrets || []).map(n => ({ nom: n, report: true })); }
+function livretsDispo() { return comptesDispo().map(c => c.nom); }
 function livretPossible(f) {
   if (!livretsDispo().length || f.type !== 'Épargne' || !f.cat || statut(f.y, f.m) === 'futur') return false;
   const c = catMap()[f.cat]; return !!c && (c.type === 'Épargne' || c.type === 'Retrait') && !estAv(f.cat);
@@ -912,7 +913,7 @@ function rendreForm() {
       <div style="display:flex;align-items:center;gap:8px"><span class="muted" style="font-size:13px;white-space:nowrap">Ma part</span><input class="libin" id="ppart" inputmode="decimal" placeholder="auto" value="${esc(f.part || '')}" style="margin:0"></div>
       <div class="note" id="presume" style="display:block"></div></div>` : ''}` : ''}
     <div class="chips">${chips}</div>${tout}
-    ${livretPossible(f) ? `<div class="grp" style="margin:2px 0 4px">${(catMap()[f.cat] || {}).type === 'Retrait' ? 'RETIRÉ DE' : 'VERSÉ SUR'} · REPORTÉ DANS TON PATRIMOINE</div><div class="chips" style="margin-bottom:8px">${livretsDispo().map(n => `<button class="chip ${f.livret === n ? 'on' : ''}" data-act="livret" data-n="${esc(n)}">${esc(courtLivret(n))}</button>`).join('')}<button class="chip ${!f.livret ? 'on' : ''}" data-act="livret" data-n="">Ne pas reporter</button></div>` : ''}
+    ${livretPossible(f) ? `<div class="grp" style="margin:2px 0 4px">${(catMap()[f.cat] || {}).type === 'Retrait' ? 'RETIRÉ DE' : 'VERSÉ SUR'}</div><div class="chips" style="margin-bottom:4px">${comptesDispo().map(c => `<button class="chip ${f.livret === c.nom ? 'on' : ''}" data-act="livret" data-n="${esc(c.nom)}">${esc(courtLivret(c.nom))}</button>`).join('')}${f.mode === 'edit' && !f.livret ? `<button class="chip on" data-act="livret" data-n="">Aucun</button>` : ''}</div><div class="note" style="display:block;margin:0 0 8px">${(() => { const c = comptesDispo().find(x => x.nom === f.livret); return !f.livret ? 'Choisis le compte pour enregistrer.' : c && c.report ? 'Livret : aussi reporté dans ton patrimoine.' : 'Noté dans ton budget (pas de report vers le patrimoine).'; })()}</div>` : ''}
     <input class="libin" id="lib" placeholder="Libellé (facultatif)" value="${esc(f.lib)}" autocomplete="off" maxlength="80">
     ${sug.length ? `<div class="chips" style="margin:-4px 0 8px">${sug.map(s => `<button class="chip sug" data-act="libsug" data-l="${esc(s)}">${esc(s)}</button>`).join('')}</div>` : ''}
     <div class="pad">${['1','2','3','4','5','6','7','8','9',',','0','⌫'].map(k => `<button data-k="${k}">${k === '⌫' ? ico.back : k}</button>`).join('')}</div>
@@ -974,6 +975,7 @@ function enregistrer() {
   const ecart = /^Écart/.test((f.lib || '').trim());
   if (!(n > 0) && !((ecart || estAv(f.cat)) && n < 0)) { $('#ferr').textContent = 'Tape un montant'; return; }
   if (!f.cat) { $('#ferr').textContent = 'Choisis une catégorie'; return; }
+  if (f.mode === 'add' && livretPossible(f) && !f.livret) { $('#ferr').textContent = 'Choisis le compte'; return; }
   const mois = moisLabel(f.y, f.m), futur = statut(f.y, f.m) === 'futur';
   if (S.data.mois && S.data.mois.length && !S.data.mois.includes(mois)) { $('#ferr').textContent = mois + " n'existe pas dans ton fichier"; return; }
   const lib = (f.lib || '').trim() || f.cat;
@@ -1824,8 +1826,10 @@ document.addEventListener('click', ev => {
     case 'budget': S.filtre.cat = el.dataset.cat; S.filtre.q = ''; S.filtre.grp = null; S.tab = 'journal'; rendre(); scrollTo(0, 0); break;
     case 'clearcat': S.filtre.cat = null; S.filtre.grp = null; rendre(true); break;
     case 'edit': { const e = trouver(el.dataset.id); if (e) ouvrirSaisie(e); break; }
-    case 'type': S.form.type = el.dataset.t; if (S.form.cat && typeDe(S.form.cat) !== S.form.type) S.form.cat = null; rendreForm(); break;
-    case 'cat': S.form.cat = el.dataset.cat; if (livretsDispo().length && S.form.type === 'Épargne') { S.form.all = false; rendreForm(); break; } if (S.form.all) { S.form.all = false; rendreForm(); break; } document.querySelectorAll('#sheetIn [data-act=cat]').forEach(c => c.classList.toggle('on', c.dataset.cat === S.form.cat)); majHint(); break;
+    case 'type': S.form.type = el.dataset.t; if (S.form.cat && typeDe(S.form.cat) !== S.form.type) S.form.cat = null;
+      if (!S.form.cat && S.form.type === 'Épargne' && livretsDispo().length) { const c = catsDuType('Épargne').find(x => x.type === 'Épargne'); if (c) S.form.cat = c.nom; }
+      rendreForm(); break;
+    case 'cat': if (S.form.cat !== el.dataset.cat) S.form.livret = null; S.form.cat = el.dataset.cat; if (livretsDispo().length && S.form.type === 'Épargne') { S.form.all = false; rendreForm(); break; } if (S.form.all) { S.form.all = false; rendreForm(); break; } document.querySelectorAll('#sheetIn [data-act=cat]').forEach(c => c.classList.toggle('on', c.dataset.cat === S.form.cat)); majHint(); break;
     case 'all': S.form.all = !S.form.all; rendreForm(); break;
     case 'save': enregistrer(); break;
     case 'livret': S.form.livret = el.dataset.n || null; rendreForm(); break;
