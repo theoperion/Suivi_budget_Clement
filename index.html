@@ -225,7 +225,7 @@ body.discret .pbh b{filter:blur(7px)}
 
 <script>
 /* ================= CONFIG ================= */
-const VERSION = '4.8';
+const VERSION = '4.9';
 // Fonctionnalités masquables (Réglages). Masquer = ne plus afficher ; les données continuent d'être enregistrées.
 const FONCS = [
   ['pj', 'Montant par jour', 'sous le grand chiffre et à la saisie'],
@@ -238,8 +238,8 @@ const FONCS = [
 const on = k => !LS.get('off', []).includes(k);
 const progresVisible = () => on('defi') || on('series') || on('bilan');
 // Optionnel : lien proposé par défaut au premier lancement. Laisser vide pour la version commune.
-const API_DEFAUT = 'https://script.google.com/macros/s/AKfycbx_pCeMiFoPnBoN9rILDEeP36tarhN1UNjvjMnBhnwDxrKQDjw6V-hcRfrn5tQlPruFvw/exec';
-const API_ATTENDUE = '3.5';
+const API_DEFAUT = 'https://script.google.com/macros/s/AKfycbx2xNeL9SxoeI-WbNz_n5UTHyvf3wHATwpjMCbToUs2aYie4XFYiiT_193Ce2QOnBM/exec';
+const API_ATTENDUE = '3.5'; // version minimale du script ; les versions plus récentes sont acceptées
 
 /* ================= OUTILS ================= */
 const IN_GAS = typeof google !== 'undefined' && google.script && google.script.run;
@@ -285,7 +285,7 @@ function prepData(d) {
 }
 function sauver() { LS.set('cache', { data: S.data, journal: S.journal }); LS.set('queue', S.queue); }
 function entriesFromData(d) {
-  return d.journal.map(r => { const p = parseMois(r.mois); const base = { mois: r.mois, lib: r.lib, cat: r.cat, montant: typeof r.montant === 'number' ? r.montant : Number(r.montant) }; return Object.assign({ id: 'r' + r.row, row: r.row, date: r.date || null, y: p ? p.y : null, m: p ? p.m : null, srv: Object.assign({}, base, { montant: r.montant }) }, base); });
+  return d.journal.map(r => { const p = parseMois(r.mois); const base = { mois: r.mois, lib: r.lib, cat: r.cat, montant: typeof r.montant === 'number' ? r.montant : Number(r.montant) }; return Object.assign({ id: 'r' + r.row, row: r.row, date: r.date || null, livret: r.livret || null, y: p ? p.y : null, m: p ? p.m : null, srv: Object.assign({}, base, { montant: r.montant }) }, base); });
 }
 
 /* ================= THÈME ================= */
@@ -359,10 +359,10 @@ async function pomper() {
     }
     else if (!e) res = { ok: true };
     else if (op.op === 'add') {
-      res = await api('add', { ligne: Object.assign(pick(e), { date: e.date || null }) });
+      res = await api('add', { ligne: Object.assign(pick(e), { date: e.date || null, livret: e.livret || null }) });
       if (res.ok) { e.row = res.row; e.srv = pick(e); }
     } else if (op.op === 'update') {
-      if (e.row != null) { res = await api('update', { row: e.row, attendu: e.srv, ligne: pick(e) }); if (res.ok) e.srv = pick(e); }
+      if (e.row != null) { res = await api('update', { row: e.row, attendu: e.srv, ligne: Object.assign(pick(e), { livret: e.livret || null }) }); if (res.ok) e.srv = pick(e); }
     } else if (op.op === 'delete') {
       if (e.row != null) {
         res = await api('delete', { row: e.row, attendu: e.srv });
@@ -373,6 +373,7 @@ async function pomper() {
     S.busy = false; setSync('off'); setTimeout(pomper, 8000); return;
   }
   S.queue.shift(); S.gen = (S.gen || 0) + 1;
+  if (res && typeof res.patrimoine === 'string' && res.patrimoine.startsWith('erreur')) toast('Budget enregistré, mais le report vers ton patrimoine a échoué (' + res.patrimoine.slice(9) + ')');
   if (e && !S.queue.some(o => o.id === e.id)) e.pending = false;
   if (x && !S.queue.some(o => o.id === x.id)) x.pending = false;
   S.busy = false;
@@ -538,6 +539,13 @@ function okRemb() {
   const e = { id: uid(), row: null, date: auj(), mois: moisLabel(y, m), lib: f.nom + ' · remboursé le ' + auj().slice(8) + '/' + auj().slice(5, 7), cat: CAT_AV, montant: -v, y, m, srv: null, pending: true, nw: true };
   S.journal.push(e); memo = new Map(); enfiler({ op: 'add', id: e.id });
   fermer(); rendre(true); toast(f.nom + ' : ' + (f.du - v > 0.005 ? 'reste ' + e2(f.du - v) + ' €' : 'tout est remboursé ✓'), 'ANNULER', () => supprimer(e));
+}
+// ---- Report des livrets vers le fichier patrimoine (seulement si le script est relié à un fichier patrimoine) ----
+const courtLivret = n => String(n).replace(/\s+Banque Pop\.?$/i, '');
+function livretsDispo() { return (S.data && S.data.livrets) || []; }
+function livretPossible(f) {
+  if (!livretsDispo().length || f.type !== 'Épargne' || !f.cat || statut(f.y, f.m) === 'futur') return false;
+  const c = catMap()[f.cat]; return !!c && (c.type === 'Épargne' || c.type === 'Retrait') && !estAv(f.cat);
 }
 // ---- Défi du mois ----
 const cleMois = (y, m) => y + '-' + m;
@@ -737,7 +745,7 @@ function cartePointBas() {
     <div class="pbs" style="position:relative;height:14px">${fin < 0 || X(fin) / W > 0.22 ? `<span style="position:absolute;left:0">aujourd'hui</span>` : ''}${fin > 0 ? `<span style="position:absolute;left:${(X(fin) / W * 100).toFixed(1)}%;transform:translateX(${X(fin) / W < 0.12 ? '-10%' : '-50%'});white-space:nowrap">1er ${esc(MC[pts[fin].m - 1])}</span>` : ''}<span style="position:absolute;right:0">fin ${esc(MC[pts[pts.length - 1].m - 1])}</span></div></button>`;
 }
 function alerteVersion() {
-  if (IN_GAS || !S.data || S.data.apiVersion === API_ATTENDUE) return '';
+  if (IN_GAS || !S.data || parseFloat(S.data.apiVersion) >= parseFloat(API_ATTENDUE)) return '';
   return `<div class="alert" style="cursor:default">⚠ Ton Apps Script n'est pas à jour : certaines modifications ne seront pas enregistrées.<ul style="list-style:none;padding:0"><li>Dans Apps Script, recolle le dernier Code.gs, puis Déployer › Gérer les déploiements › crayon › Nouvelle version › Déployer.</li></ul></div>`;
 }
 function lignePJ() {
@@ -824,7 +832,7 @@ function htmlListe() {
   const rows = l.map(({ e, c }) => {
     const t = c ? c.type : '';
     if (t === 'Revenu' || t === 'Retrait') rev += e.montant; else dep += e.montant;
-    return `<button class="jl ${e.pending ? 'pend' : ''} ${e.nw ? 'nw' : ''}" data-act="edit" data-id="${e.id}"><div class="l"><div>${esc(e.lib || e.cat)}</div><div class="c">${S.filtre.q ? esc(MC[e.m - 1]) + ' · ' : ''}${esc(e.cat)}${c ? '' : ' · catégorie inconnue'}${e.pending ? ' · envoi…' : ''}</div></div>
+    return `<button class="jl ${e.pending ? 'pend' : ''} ${e.nw ? 'nw' : ''}" data-act="edit" data-id="${e.id}"><div class="l"><div>${esc(e.lib || e.cat)}</div><div class="c">${S.filtre.q ? esc(MC[e.m - 1]) + ' · ' : ''}${esc(e.cat)}${e.livret ? ' → ' + esc(courtLivret(e.livret)) : ''}${c ? '' : ' · catégorie inconnue'}${e.pending ? ' · envoi…' : ''}</div></div>
       ${montantLigne(t, e.montant)}</button>`;
   }).join('');
   return `<div class="sec" style="margin-top:14px"><span>${l.length} LIGNE${l.length > 1 ? 'S' : ''}${S.filtre.q ? ' EN ' + S.y : ''}</span><span>−${e0(dep)}${rev ? ' · +' + e0(rev) : ''}</span></div>` + rows;
@@ -870,7 +878,7 @@ function suggestions(cat) {
 function ouvrirSaisie(e, dup) {
   const t = e ? typeDe(e.cat) : 'Dépense';
   const ym = statut(S.y, S.m) === 'futur' ? { y: now.getFullYear(), m: now.getMonth() + 1 } : { y: S.y, m: S.m };
-  S.form = e && !dup ? { mode: 'edit', id: e.id, row: e.row, type: t, montant: String(e.montant).replace('.', ','), cat: e.cat, lib: e.lib === e.cat ? '' : e.lib, y: e.y || S.y, m: e.m || S.m, all: false, arm: false, jour: null }
+  S.form = e && !dup ? { mode: 'edit', id: e.id, row: e.row, livret: e.livret || null, type: t, montant: String(e.montant).replace('.', ','), cat: e.cat, lib: e.lib === e.cat ? '' : e.lib, y: e.y || S.y, m: e.m || S.m, all: false, arm: false, jour: null }
     : { mode: 'add', type: t, montant: e ? String(e.montant).replace('.', ',') : '', cat: e ? e.cat : null, lib: e && e.lib !== e.cat ? e.lib : '', y: ym.y, m: ym.m, all: false, arm: false, jour: null };
   rendreForm(); ouvrirSheet();
 }
@@ -904,6 +912,7 @@ function rendreForm() {
       <div style="display:flex;align-items:center;gap:8px"><span class="muted" style="font-size:13px;white-space:nowrap">Ma part</span><input class="libin" id="ppart" inputmode="decimal" placeholder="auto" value="${esc(f.part || '')}" style="margin:0"></div>
       <div class="note" id="presume" style="display:block"></div></div>` : ''}` : ''}
     <div class="chips">${chips}</div>${tout}
+    ${livretPossible(f) ? `<div class="grp" style="margin:2px 0 4px">${(catMap()[f.cat] || {}).type === 'Retrait' ? 'RETIRÉ DE' : 'VERSÉ SUR'} · REPORTÉ DANS TON PATRIMOINE</div><div class="chips" style="margin-bottom:8px">${livretsDispo().map(n => `<button class="chip ${f.livret === n ? 'on' : ''}" data-act="livret" data-n="${esc(n)}">${esc(courtLivret(n))}</button>`).join('')}<button class="chip ${!f.livret ? 'on' : ''}" data-act="livret" data-n="">Ne pas reporter</button></div>` : ''}
     <input class="libin" id="lib" placeholder="Libellé (facultatif)" value="${esc(f.lib)}" autocomplete="off" maxlength="80">
     ${sug.length ? `<div class="chips" style="margin:-4px 0 8px">${sug.map(s => `<button class="chip sug" data-act="libsug" data-l="${esc(s)}">${esc(s)}</button>`).join('')}</div>` : ''}
     <div class="pad">${['1','2','3','4','5','6','7','8','9',',','0','⌫'].map(k => `<button data-k="${k}">${k === '⌫' ? ico.back : k}</button>`).join('')}</div>
@@ -991,7 +1000,7 @@ function enregistrer() {
   }
   if (f.mode === 'add') {
     const avant = f.type === 'Dépense' ? budgetDe(f.cat, f.y, f.m) : null;
-    const e = { id: uid(), row: null, date: auj(), mois, lib, cat: f.cat, montant: n, y: f.y, m: f.m, srv: null, pending: true, nw: true };
+    const e = { id: uid(), row: null, date: auj(), livret: livretPossible(f) ? f.livret || null : null, mois, lib, cat: f.cat, montant: n, y: f.y, m: f.m, srv: null, pending: true, nw: true };
     const use = LS.get('usage', {}); use[f.cat] = (use[f.cat] || 0) + 1; LS.set('usage', use);
     S.journal.push(e); memo = new Map();
     { const c = catMap()[e.cat]; if (c && c.type === 'Dépense' && VAR.includes(c.groupe) && e.y === now.getFullYear() && e.m === now.getMonth() + 1) noterDepenseDuJour(); }
@@ -1002,7 +1011,7 @@ function enregistrer() {
     enfiler({ op: 'add', id: e.id });
   } else {
     const e = trouver(f.id) || (f.row != null && S.journal.find(x => x.row === f.row && !x.deleted)); if (!e) { fermer(); toast('Ligne introuvable, réessaie'); return; }
-    Object.assign(e, { mois, lib, cat: f.cat, montant: n, y: f.y, m: f.m, pending: true });
+    Object.assign(e, { mois, lib, cat: f.cat, montant: n, y: f.y, m: f.m, livret: livretPossible(f) ? f.livret || null : null, pending: true });
     fermer(); rendre(true); toast('Ligne modifiée'); enfiler({ op: 'update', id: e.id });
   }
 }
@@ -1816,9 +1825,10 @@ document.addEventListener('click', ev => {
     case 'clearcat': S.filtre.cat = null; S.filtre.grp = null; rendre(true); break;
     case 'edit': { const e = trouver(el.dataset.id); if (e) ouvrirSaisie(e); break; }
     case 'type': S.form.type = el.dataset.t; if (S.form.cat && typeDe(S.form.cat) !== S.form.type) S.form.cat = null; rendreForm(); break;
-    case 'cat': S.form.cat = el.dataset.cat; if (S.form.all) { S.form.all = false; rendreForm(); break; } document.querySelectorAll('#sheetIn [data-act=cat]').forEach(c => c.classList.toggle('on', c.dataset.cat === S.form.cat)); majHint(); break;
+    case 'cat': S.form.cat = el.dataset.cat; if (livretsDispo().length && S.form.type === 'Épargne') { S.form.all = false; rendreForm(); break; } if (S.form.all) { S.form.all = false; rendreForm(); break; } document.querySelectorAll('#sheetIn [data-act=cat]').forEach(c => c.classList.toggle('on', c.dataset.cat === S.form.cat)); majHint(); break;
     case 'all': S.form.all = !S.form.all; rendreForm(); break;
     case 'save': enregistrer(); break;
+    case 'livret': S.form.livret = el.dataset.n || null; rendreForm(); break;
     case 'partage': S.form.partage = !S.form.partage; rendreForm(); break;
     case 'pnom': { const f = S.form, n = el.dataset.n; f.noms = f.noms || []; f.noms = f.noms.includes(n) ? f.noms.filter(x => x !== n) : [...f.noms, n]; rendreForm(); break; }
     case 'pajout': ajoutNom(); break;
