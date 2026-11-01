@@ -614,7 +614,7 @@ const FONCS = [
 const on = k => !LS.get('off', []).includes(k);
 const progresVisible = () => on('defi') || on('series') || on('bilan') || on('jeu') || ['saison', 'semaine', 'escalier', 'tirelires', 'voyage', 'objectif', 'resume'].some(k => ouvert(k)) || FEAT.some(f => !dispo(f[0]));
 // Optionnel : lien proposé par défaut au premier lancement. Laisser vide pour la version commune.
-const API_DEFAUT = 'https://script.google.com/macros/s/AKfycbwzQop24pJk4yVXzYa2i9AHnHwnoLiJukP1OQkdmi41Tp0ofeNH0r6jXzqJpMmLnljRVw/exec';
+const API_DEFAUT = 'https://script.google.com/macros/s/AKfycbxG2oJcHj6CoMzqQPikiftrv4oPleSMJXXk-BuPqdgr1bJGqUKoGB_GTQVemakKpzI-/exec';
 const API_ATTENDUE = '3.5'; // version minimale du script ; les versions plus récentes sont acceptées
 
 /* ================= OUTILS ================= */
